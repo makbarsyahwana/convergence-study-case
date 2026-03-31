@@ -1,0 +1,1020 @@
+{
+  "info": {
+    "name": "Healthfulforu API",
+    "description": "Full test collection for the Healthfulforu subscription-based health education platform API.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000/api/v1" },
+    { "key": "adminToken", "value": "" },
+    { "key": "premiumToken", "value": "" },
+    { "key": "freeToken", "value": "" },
+    { "key": "newUserToken", "value": "" },
+    { "key": "premiumSlug", "value": "understanding-anxiety-comprehensive-guide" },
+    { "key": "freeSlug", "value": "10-simple-ways-improve-daily-nutrition" },
+    { "key": "webhookArticleId", "value": "9999" }
+  ],
+  "item": [
+    {
+      "name": "1. Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Body has status ok', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.status).to.eql('ok');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Auth",
+      "item": [
+        {
+          "name": "Register — happy path",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/auth/register", "host": ["{{baseUrl}}"], "path": ["auth", "register"] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"testuser@example.com\",\n  \"password\": \"TestUser123!\",\n  \"firstName\": \"Test\",\n  \"lastName\": \"User\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "const json = pm.response.json();",
+                  "if (json.accessToken) {",
+                  "  pm.collectionVariables.set('newUserToken', json.accessToken);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Register — duplicate email (409)",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/auth/register", "host": ["{{baseUrl}}"], "path": ["auth", "register"] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@healthfulforu.com\",\n  \"password\": \"Admin123!\",\n  \"firstName\": \"Dup\",\n  \"lastName\": \"User\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 409 Conflict', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Register — invalid data (400)",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/auth/register", "host": ["{{baseUrl}}"], "path": ["auth", "register"] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"not-an-email\",\n  \"password\": \"short\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400 Bad Request', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login — admin",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@healthfulforu.com\",\n  \"password\": \"Admin123!\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('Has accessToken', () => pm.expect(json.accessToken).to.be.a('string'));",
+                  "pm.collectionVariables.set('adminToken', json.accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login — premium user",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"premium@example.com\",\n  \"password\": \"Premium123!\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('Has accessToken', () => pm.expect(json.accessToken).to.be.a('string'));",
+                  "pm.collectionVariables.set('premiumToken', json.accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login — free user",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"free@example.com\",\n  \"password\": \"FreeUser123!\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('Has accessToken', () => pm.expect(json.accessToken).to.be.a('string'));",
+                  "pm.collectionVariables.set('freeToken', json.accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login — wrong password (401)",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@healthfulforu.com\",\n  \"password\": \"WrongPassword!\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401 Unauthorized', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. User",
+      "item": [
+        {
+          "name": "Get profile — with JWT",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/users/me", "host": ["{{baseUrl}}"], "path": ["users", "me"] },
+            "header": [{ "key": "Authorization", "value": "Bearer {{premiumToken}}" }]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Has email', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.email).to.eql('premium@example.com');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get profile — no token (401)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/users/me", "host": ["{{baseUrl}}"], "path": ["users", "me"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update preferences",
+          "request": {
+            "method": "PUT",
+            "url": { "raw": "{{baseUrl}}/users/me/preferences", "host": ["{{baseUrl}}"], "path": ["users", "me", "preferences"] },
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{premiumToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"topicIds\": [],\n  \"emailDigest\": true,\n  \"language\": \"en\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. Content — Public",
+      "item": [
+        {
+          "name": "List all content (no auth)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/content", "host": ["{{baseUrl}}"], "path": ["content"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Has data array', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.data).to.be.an('array');",
+                  "  pm.expect(json.meta).to.have.property('total');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List with pagination (page=2, limit=2)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/content?page=2&limit=2",
+              "host": ["{{baseUrl}}"],
+              "path": ["content"],
+              "query": [
+                { "key": "page", "value": "2" },
+                { "key": "limit", "value": "2" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Returns max 2 items', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.data.length).to.be.at.most(2);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List with search (nutrition)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/content?search=nutrition",
+              "host": ["{{baseUrl}}"],
+              "path": ["content"],
+              "query": [{ "key": "search", "value": "nutrition" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Results contain nutrition keyword', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.data.length).to.be.above(0);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List by tag (mental-health)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/content?tagSlug=mental-health",
+              "host": ["{{baseUrl}}"],
+              "path": ["content"],
+              "query": [{ "key": "tagSlug", "value": "mental-health" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List by type (VIDEO)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/content?type=VIDEO",
+              "host": ["{{baseUrl}}"],
+              "path": ["content"],
+              "query": [{ "key": "type", "value": "VIDEO" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List only premium",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/content?isPremium=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["content"],
+              "query": [{ "key": "isPremium", "value": "true" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('All items are premium', () => {",
+                  "  const json = pm.response.json();",
+                  "  json.data.forEach(item => pm.expect(item.isPremium).to.be.true);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get free content by slug — full body",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/content/{{freeSlug}}", "host": ["{{baseUrl}}"], "path": ["content", "{{freeSlug}}"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Body is not null (free content)', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.body).to.not.be.null;",
+                  "  pm.expect(json._gated).to.eql(false);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get premium content by slug — no auth (gated)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/content/{{premiumSlug}}", "host": ["{{baseUrl}}"], "path": ["content", "{{premiumSlug}}"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Content is gated', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json._gated).to.eql(true);",
+                  "  pm.expect(json.body).to.be.null;",
+                  "  pm.expect(json._message).to.include('Subscribe');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get non-existent slug (404)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/content/this-slug-does-not-exist", "host": ["{{baseUrl}}"], "path": ["content", "this-slug-does-not-exist"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. Content — Gating Scenarios",
+      "description": "Tests premium content access with different user roles. Run the Auth folder first to populate tokens.",
+      "item": [
+        {
+          "name": "Free user reads premium content → gated",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/content/{{premiumSlug}}", "host": ["{{baseUrl}}"], "path": ["content", "{{premiumSlug}}"] },
+            "header": [{ "key": "Authorization", "value": "Bearer {{freeToken}}" }]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Content IS gated for free user', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json._gated).to.eql(true);",
+                  "  pm.expect(json.body).to.be.null;",
+                  "  pm.expect(json.videoUrl).to.be.null;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Premium user reads premium content → full access",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/content/{{premiumSlug}}", "host": ["{{baseUrl}}"], "path": ["content", "{{premiumSlug}}"] },
+            "header": [{ "key": "Authorization", "value": "Bearer {{premiumToken}}" }]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Content NOT gated for premium user', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json._gated).to.eql(false);",
+                  "  pm.expect(json.body).to.not.be.null;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin reads premium content → full access",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/content/{{premiumSlug}}", "host": ["{{baseUrl}}"], "path": ["content", "{{premiumSlug}}"] },
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Content NOT gated for admin', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json._gated).to.eql(false);",
+                  "  pm.expect(json.body).to.not.be.null;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Free user reads free content → full access",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/content/{{freeSlug}}", "host": ["{{baseUrl}}"], "path": ["content", "{{freeSlug}}"] },
+            "header": [{ "key": "Authorization", "value": "Bearer {{freeToken}}" }]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Free content is accessible to free user', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json._gated).to.eql(false);",
+                  "  pm.expect(json.body).to.not.be.null;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "6. Subscription",
+      "item": [
+        {
+          "name": "Get my subscription (premium user)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/subscriptions/me", "host": ["{{baseUrl}}"], "path": ["subscriptions", "me"] },
+            "header": [{ "key": "Authorization", "value": "Bearer {{premiumToken}}" }]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Has active subscription', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.status).to.eql('ACTIVE');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Upgrade plan (free → MONTHLY)",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/subscriptions/upgrade", "host": ["{{baseUrl}}"], "path": ["subscriptions", "upgrade"] },
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{freeToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"plan\": \"MONTHLY\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cancel subscription",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/subscriptions/cancel", "host": ["{{baseUrl}}"], "path": ["subscriptions", "cancel"] },
+            "header": [{ "key": "Authorization", "value": "Bearer {{freeToken}}" }]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get subscription without auth (401)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/subscriptions/me", "host": ["{{baseUrl}}"], "path": ["subscriptions", "me"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "7. Tags",
+      "item": [
+        {
+          "name": "List all tags",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/tags", "host": ["{{baseUrl}}"], "path": ["tags"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Returns array of tags', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json).to.be.an('array');",
+                  "  pm.expect(json.length).to.be.above(0);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get tag by slug with content",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/tags/nutrition", "host": ["{{baseUrl}}"], "path": ["tags", "nutrition"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Has tag name', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.name).to.eql('Nutrition');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "8. CMS Sync",
+      "item": [
+        {
+          "name": "Webhook — create premium article",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/cms-sync/webhook", "host": ["{{baseUrl}}"], "path": ["cms-sync", "webhook"] },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-strapi-event", "value": "entry.create" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"entry.create\",\n  \"model\": \"article\",\n  \"entry\": {\n    \"id\": 9999,\n    \"title\": \"Premium: Advanced Heart Monitoring Techniques\",\n    \"slug\": \"premium-advanced-heart-monitoring\",\n    \"body\": \"<p>This is premium content about advanced heart monitoring...</p>\",\n    \"excerpt\": \"Learn about the latest heart monitoring techniques.\",\n    \"type\": \"article\",\n    \"isPremium\": true,\n    \"publishedAt\": \"2024-03-15T00:00:00.000Z\",\n    \"readTimeMinutes\": 8\n  }\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Content synced', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.status).to.eql('synced');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verify — premium user can read webhook-created content",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/content/premium-advanced-heart-monitoring", "host": ["{{baseUrl}}"], "path": ["content", "premium-advanced-heart-monitoring"] },
+            "header": [{ "key": "Authorization", "value": "Bearer {{premiumToken}}" }]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Premium user gets full content', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json._gated).to.eql(false);",
+                  "  pm.expect(json.body).to.not.be.null;",
+                  "  pm.expect(json.title).to.include('Advanced Heart Monitoring');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verify — free user sees webhook-created content gated",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/content/premium-advanced-heart-monitoring", "host": ["{{baseUrl}}"], "path": ["content", "premium-advanced-heart-monitoring"] },
+            "header": [{ "key": "Authorization", "value": "Bearer {{freeToken}}" }]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Free user sees gated content', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json._gated).to.eql(true);",
+                  "  pm.expect(json.body).to.be.null;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Webhook — update article",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/cms-sync/webhook", "host": ["{{baseUrl}}"], "path": ["cms-sync", "webhook"] },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-strapi-event", "value": "entry.update" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"entry.update\",\n  \"model\": \"article\",\n  \"entry\": {\n    \"id\": 9999,\n    \"title\": \"Premium: Advanced Heart Monitoring Techniques (Updated)\",\n    \"slug\": \"premium-advanced-heart-monitoring\",\n    \"body\": \"<p>Updated premium content about advanced heart monitoring...</p>\",\n    \"excerpt\": \"Updated excerpt about heart monitoring.\",\n    \"type\": \"article\",\n    \"isPremium\": true,\n    \"publishedAt\": \"2024-03-15T00:00:00.000Z\",\n    \"readTimeMinutes\": 10\n  }\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Content synced', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.status).to.eql('synced');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Webhook — unpublish article",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/cms-sync/webhook", "host": ["{{baseUrl}}"], "path": ["cms-sync", "webhook"] },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-strapi-event", "value": "entry.unpublish" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"entry.unpublish\",\n  \"model\": \"article\",\n  \"entry\": {\n    \"id\": 9999\n  }\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Content unpublished', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.status).to.eql('unpublished');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Webhook — publish article",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/cms-sync/webhook", "host": ["{{baseUrl}}"], "path": ["cms-sync", "webhook"] },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-strapi-event", "value": "entry.publish" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"entry.publish\",\n  \"model\": \"article\",\n  \"entry\": {\n    \"id\": 9999\n  }\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Content published', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.status).to.eql('published');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Webhook — delete article",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/cms-sync/webhook", "host": ["{{baseUrl}}"], "path": ["cms-sync", "webhook"] },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-strapi-event", "value": "entry.delete" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"entry.delete\",\n  \"model\": \"article\",\n  \"entry\": {\n    \"id\": 9999\n  }\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Content deleted', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.status).to.eql('deleted');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Webhook — unsupported model (ignored)",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/cms-sync/webhook", "host": ["{{baseUrl}}"], "path": ["cms-sync", "webhook"] },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-strapi-event", "value": "entry.create" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"entry.create\",\n  \"model\": \"category\",\n  \"entry\": {\n    \"id\": 1,\n    \"name\": \"Test Category\"\n  }\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Model ignored', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.status).to.eql('ignored');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Full sync — admin (JWT required)",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/cms-sync/full-sync", "host": ["{{baseUrl}}"], "path": ["cms-sync", "full-sync"] },
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201 or 200', () => {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+                  "});",
+                  "pm.test('Has sync stats', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json).to.have.property('synced');",
+                  "  pm.expect(json).to.have.property('total');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Full sync — no auth (401)",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/cms-sync/full-sync", "host": ["{{baseUrl}}"], "path": ["cms-sync", "full-sync"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Full sync — non-admin (403)",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/cms-sync/full-sync", "host": ["{{baseUrl}}"], "path": ["cms-sync", "full-sync"] },
+            "header": [{ "key": "Authorization", "value": "Bearer {{freeToken}}" }]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
