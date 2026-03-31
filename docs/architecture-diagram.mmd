@@ -1,0 +1,57 @@
+graph TB
+    subgraph Clients["Clients"]
+        WebApp["Web App<br/>(Next.js / SSR)"]
+        MobileApp["Mobile App<br/>(Future - React Native)"]
+        AdminCMS["Admin Panel<br/>(Strapi CMS)"]
+    end
+
+    subgraph Gateway["API Gateway"]
+        LB["Nginx / AWS ALB<br/>Load Balancer + SSL"]
+        RL["Rate Limiter"]
+    end
+
+    subgraph Backend["NestJS Modular Monolith"]
+        AuthModule["Auth Module<br/>JWT + Passport"]
+        ContentModule["Content Module<br/>CRUD + Filtering"]
+        SubsModule["Subscription Module<br/>Plan Management"]
+        UserModule["User Module<br/>Profile + Preferences"]
+        CacheModule["Cache Module<br/>Redis Integration"]
+        CMSSync["CMS Sync<br/>Strapi Webhooks"]
+    end
+
+    subgraph DataLayer["Data Layer"]
+        PG["PostgreSQL<br/>Primary Database"]
+        Redis["Redis<br/>Cache + Sessions"]
+        S3["S3 / MinIO<br/>Media Storage"]
+    end
+
+    subgraph External["External Services"]
+        Strapi["Strapi CMS<br/>Content Management"]
+        Stripe["Stripe<br/>(Future Payments)"]
+        Email["SendGrid / SES<br/>Email Notifications"]
+        CDN["CloudFront / Cloudflare<br/>CDN"]
+    end
+
+    WebApp --> LB
+    MobileApp --> LB
+    AdminCMS --> Strapi
+
+    LB --> RL
+    RL --> AuthModule
+    RL --> ContentModule
+    RL --> SubsModule
+    RL --> UserModule
+
+    AuthModule --> PG
+    AuthModule --> Redis
+    ContentModule --> PG
+    ContentModule --> CacheModule
+    SubsModule --> PG
+    UserModule --> PG
+
+    CacheModule --> Redis
+    CMSSync --> PG
+    Strapi -->|Webhook| CMSSync
+
+    ContentModule --> S3
+    S3 --> CDN
