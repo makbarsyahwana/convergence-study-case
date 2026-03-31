@@ -1,6 +1,6 @@
 # Healthfulforu.com v2.0
 
-> Backend prototype for a subscription-based health education platform targeting the Asia Pacific region.
+> Backend prototype for a subscription-based health education platform.
 
 ## Table of Contents
 
