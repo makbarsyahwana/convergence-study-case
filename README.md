@@ -16,7 +16,11 @@
 
 ## Architecture Overview
 
-The backend is a modular monolith — a single NestJS application split into domain modules. This is the prototype
+This is the full architecture design for the platform. for prototype purpose the code only cover :
+1. Backend API(Content API, Auth API: Simple login/register)
+3. Subscription flag
+4. Database models + migrations
+5. Headless CMS Strapi integration
 
 ```mermaid
 graph TB
