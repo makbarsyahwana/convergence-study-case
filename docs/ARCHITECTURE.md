@@ -65,33 +65,43 @@
 
 ## 2. Technology Choices
 
-### Why NestJS (Node.js) over Laravel or Go?
+### Why NestJS over Laravel or Go?
+
+This is a read-heavy API — most traffic is `GET /content` and `GET /content/:slug`. The critical path on every request is: **decode JWT → check subscription status → query content → gate the body if premium**. The right framework for this workload is one that handles many concurrent reads without blocking and makes the gating logic easy to reason about.
 
 | Criteria | NestJS (Node.js) | Laravel (PHP) | Go |
 |----------|------------------|---------------|-----|
-| **Type safety** | ✅ TypeScript native | ❌ PHP lacks strict typing | ✅ Strong typing |
-| **Developer ecosystem** | ✅ Huge npm ecosystem | ✅ Mature ecosystem | ⚠️ Smaller web ecosystem |
-| **Team hiring** | ✅ JS/TS developers abundant in APAC | ✅ PHP common in APAC | ⚠️ Harder to hire |
-| **Framework maturity** | ✅ Modular, DI, decorators | ✅ Very mature MVC | ⚠️ No dominant framework |
-| **Performance** | ✅ Non-blocking I/O, great for read-heavy | ✅ Adequate with Octane | ✅✅ Best raw performance |
-| **Mobile API readiness** | ✅ JSON-native, same team can build BFF | ✅ Good API support | ✅ Good API support |
-| **Code sharing** | ✅ Share types with Next.js frontend | ❌ No sharing | ❌ No sharing |
-| **Learning curve** | ⚠️ Moderate (DI, decorators) | ✅ Low | ⚠️ Moderate |
+| **Concurrent reads** | Non-blocking event loop — while waiting on a DB query, the process handles other requests. No thread spawning per request | PHP-FPM spawns a worker process per request. More memory per connection. Octane (Swoole) improves this but adds operational complexity | Goroutines are very lightweight — can hold thousands of open connections with low memory. Best concurrency model of the three |
+| **Content gating** | Guards run before the handler — gating logic (`isPremium` + subscription check) lives in one place, applied declaratively per route | Middleware and Gates work similarly. Clean enough, but subscription checks often end up scattered across controllers without discipline | Middleware is manual — you write the gating logic yourself and wire it to each route handler. No conventions, just code |
+| **Subscription check per request** | JWT payload carries `hasActiveSubscription` — avoids a DB hit on every read. Guard reads from the token, not the DB | Same pattern is possible with JWT, but Passport.js equivalent (Laravel Sanctum/JWT-auth) needs extra config to embed custom claims | Middleware can read JWT claims directly. Same capability, just more code to set it up |
+| **Caching (content lists)** | In-process Map cache or Redis — easy to inject via DI and invalidate on CMS webhook events | Laravel Cache facade works well. Redis or file cache. Invalidation on webhook is straightforward | No built-in cache layer. Use a Redis client directly. Works fine, but no DI — you pass the client around manually |
+| **Type safety on response shape** | TypeScript interfaces on DTOs catch mismatches between what the service returns and what the controller sends. Shared with frontend | PHP arrays are untyped by default. API Resources help but don't catch shape errors at write-time | Compile-time struct checks. If the struct compiles, the shape is correct. No runtime surprises |
+| **Downsides for this workload** | CPU-bound work (e.g., image processing, PDF generation) blocks the event loop. Not an issue for content reads, but matters if the API expands | N+1 queries are easy to miss — a list of 20 articles with tags each triggering a separate query. Need explicit `with()` eager loading | Genuinely more verbose. A single content endpoint with gating, pagination, and filtering takes 3–4x the lines of NestJS |
 
-**Decision: NestJS** — TypeScript provides type safety and code sharing with the Next.js frontend. NestJS's modular architecture maps naturally to domain boundaries (auth, content, subscription). The non-blocking I/O model is ideal for a read-heavy content platform. The abundant JS/TS talent pool in APAC reduces hiring friction.
+**Decision: NestJS.**
 
-### Why Modular Monolith over Pure Monolith or Microservices?
+For a read-heavy content API with per-request subscription gating, the two things that matter technically are concurrency and how the gating logic is expressed.
 
-| Stage | Architecture | Rationale |
-|-------|-------------|-----------|
-| **MVP (now)** | Modular Monolith | Single deployable unit, fast iteration, clear module boundaries |
-| **Growth (later)** | Extract to Microservices | Split auth, content, subscription into separate services when team grows |
+- **Concurrency:** Node's event loop handles many concurrent reads efficiently because content GETs are I/O-bound (waiting on Postgres), not CPU-bound. Go handles concurrency better in absolute terms, but the difference doesn't matter at the scale this platform targets.
+- **Gating logic:** NestJS Guards let you express `@Roles('SUBSCRIBER')` or check `hasActiveSubscription` in a single injectable class, applied at the controller level. This keeps gating out of the service layer and easy to audit. Laravel Middleware achieves the same result. Go requires writing the equivalent logic manually.
+- **Practical:** The team writes TypeScript. The frontend is React/Next.js. Shared TS interfaces between the API and frontend mean the content shape — including `_gated`, `body`, `isPremium` — stays in sync without manual coordination.
 
-**Decision: Modular Monolith** — A small team (2-4 engineers) cannot sustain the operational overhead of microservices (separate deployments, service mesh, distributed tracing). A modular monolith gives us:
-- **Clear boundaries** — each NestJS module owns its domain (auth, content, subscription)
-- **Single deployment** — one Docker image, one CI/CD pipeline
-- **Easy extraction** — modules communicate via well-defined interfaces, making future service extraction straightforward
-- **Shared database** — avoids distributed transaction complexity at MVP stage
+
+### Why Modular Monolith?
+
+| Approach | When it makes sense | When it doesn't |
+|----------|-------------------|-----------------|
+| **Plain monolith** | Solo dev, throwaway prototype | Code becomes tangled fast once multiple devs contribute |
+| **Modular monolith** | Small team (2-5), single product, clear domain boundaries | If modules need independent scaling or different tech stacks |
+| **Microservices** | Large team (10+), high scale, independent deployment needed | Small team — the operational overhead (networking, tracing, deployment pipelines per service) will slow you down |
+
+**Decision: Modular monolith.** With 2-4 engineers, microservices means spending more time on deployment pipelines, service discovery, and distributed tracing than on the actual product. What we get instead:
+- **One deployment** — one Docker image, one CI/CD pipeline, one thing to debug when it breaks
+- **Module boundaries** — each NestJS module (auth, content, subscription) has its own service and controller. They call each other through injected services, not over HTTP
+- **Shared database** — one Postgres instance, no distributed transactions, no eventual consistency headaches
+- **Can split later** — if a module needs to scale independently, the interfaces are there. But realistically, extracting a module into its own service still means a lot of work (separate database, API contracts, new deployment pipeline). Don't assume it'll be easy
+
+The main risk: without code reviews enforcing boundaries, developers will take shortcuts across modules and it becomes a regular monolith. The structure only works if the team agrees to follow it.
 
 ---
 

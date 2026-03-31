@@ -18,10 +18,64 @@
 
 The backend is a modular monolith — a single NestJS application split into domain modules. This is a prototype, not production-ready.
 
-```
-Clients (Web/Mobile) → Nginx/ALB → NestJS API → PostgreSQL + Redis
-                                         ↑
-                       Strapi CMS ──(webhook)──┘
+```mermaid
+graph TB
+    subgraph Clients["Clients"]
+        WebApp["Web App<br/>(Next.js / SSR)"]
+        MobileApp["Mobile App<br/>(Future - React Native)"]
+        AdminCMS["Admin Panel<br/>(Strapi CMS)"]
+    end
+
+    subgraph Gateway["API Gateway"]
+        LB["Nginx / AWS ALB<br/>Load Balancer + SSL"]
+        RL["Rate Limiter"]
+    end
+
+    subgraph Backend["NestJS Modular Monolith"]
+        AuthModule["Auth Module<br/>JWT + Passport"]
+        ContentModule["Content Module<br/>CRUD + Filtering"]
+        SubsModule["Subscription Module<br/>Plan Management"]
+        UserModule["User Module<br/>Profile + Preferences"]
+        CacheModule["Cache Module<br/>Redis Integration"]
+        CMSSync["CMS Sync<br/>Strapi Webhooks"]
+    end
+
+    subgraph DataLayer["Data Layer"]
+        PG["PostgreSQL<br/>Primary Database"]
+        Redis["Redis<br/>Cache + Sessions"]
+        S3["S3 / MinIO<br/>Media Storage"]
+    end
+
+    subgraph External["External Services"]
+        Strapi["Strapi CMS<br/>Content Management"]
+        Stripe["Stripe<br/>(Future Payments)"]
+        Email["SendGrid / SES<br/>Email Notifications"]
+        CDN["CloudFront / Cloudflare<br/>CDN"]
+    end
+
+    WebApp --> LB
+    MobileApp --> LB
+    AdminCMS --> Strapi
+
+    LB --> RL
+    RL --> AuthModule
+    RL --> ContentModule
+    RL --> SubsModule
+    RL --> UserModule
+
+    AuthModule --> PG
+    AuthModule --> Redis
+    ContentModule --> PG
+    ContentModule --> CacheModule
+    SubsModule --> PG
+    UserModule --> PG
+
+    CacheModule --> Redis
+    CMSSync --> PG
+    Strapi -->|Webhook| CMSSync
+
+    ContentModule --> S3
+    S3 --> CDN
 ```
 
 ### Key Architectural Decisions
@@ -65,43 +119,107 @@ See [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) for the full design documen
 - Docker & Docker Compose
 - npm
 
-### Quick Start
+### 1. Backend Setup
 
 ```bash
-# 1. Clone the repository
+# Clone the repository
 git clone <repo-url>
 cd convergence-study-case
 
-# 2. Start infrastructure (PostgreSQL + Redis)
+# Start infrastructure (PostgreSQL + Redis)
 docker compose up -d postgres redis
 
-# 3. Install dependencies
+# Install dependencies
 cd backend
 npm install
 
-# 4. Generate Prisma client
+# Generate Prisma client
 npx prisma generate
 
-# 5. Run database migrations
+# Run database migrations
 npx prisma migrate dev
 
-# 6. Seed the database
+# Seed the database
 npm run prisma:seed
 
-# 7. Start the development server
+# Start the development server
 npm run start:dev
 ```
 
 The API will be available at `http://localhost:3000/api/v1`
 Swagger docs at `http://localhost:3000/api/docs`
 
-### Full Stack (with Strapi CMS)
+### 2. Strapi CMS Setup
+
+#### Step 1: Create Strapi v4 project
 
 ```bash
-# Start all services including Strapi
-docker compose up -d
+cd convergence-study-case
+npx create-strapi-app@latest cms --quickstart --no-run
+```
 
-# The API is on port 3000, Strapi on port 1337
+This creates a `cms/` folder with a full Strapi v4 project using SQLite by default.
+
+#### Step 2: Start Strapi
+
+```bash
+cd cms
+npm run develop
+```
+
+Strapi Admin will be available at `http://localhost:1337/admin`. Create your admin account on first visit.
+
+#### Step 3: Create the `Article` content type
+
+Go to Content-Type Builder → Create new collection type → `Article` with these fields:
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `title` | Short text | Required |
+| `slug` | UID (from title) | Required, unique |
+| `body` | Rich text | |
+| `excerpt` | Long text | |
+| `type` | Enumeration | Values: `ARTICLE`, `VIDEO` |
+| `isPremium` | Boolean | Default: false |
+| `thumbnailUrl` | Short text | |
+| `videoUrl` | Short text | |
+| `readTimeMinutes` | Integer | |
+
+Save the content type — Strapi will restart automatically.
+
+#### Step 4: Generate an API token
+
+Strapi Admin → Settings → API Tokens → Create new token → **Full access** → copy the token and add it to `backend/.env`:
+
+```
+STRAPI_API_TOKEN=your-token-here
+```
+
+#### Step 5: Configure webhook
+
+Strapi Admin → Settings → Webhooks → Add webhook:
+
+- **URL**: `http://localhost:3000/api/v1/cms-sync/webhook`
+- **Events**: Entry → Create, Update, Delete, Publish, Unpublish
+- **Headers** (optional): add `x-strapi-signature` with your webhook secret if `STRAPI_WEBHOOK_SECRET` is set in `backend/.env`
+
+### 3. Running the Full Stack
+
+After both backend and Strapi are set up:
+
+```bash
+# Terminal 1 — infrastructure
+docker compose up -d postgres redis
+
+# Terminal 2 — backend API
+cd backend
+npx prisma migrate dev
+npm run prisma:seed
+npm run start:dev          # http://localhost:3000
+
+# Terminal 3 — Strapi CMS
+cd cms
+npm run develop            # http://localhost:1337
 ```
 
 ### Test Accounts (after seeding)
@@ -116,6 +234,8 @@ docker compose up -d
 ### Running Tests
 
 ```bash
+cd backend
+
 # Unit tests
 npm test
 
