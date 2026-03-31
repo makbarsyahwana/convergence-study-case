@@ -16,7 +16,7 @@
 
 ## Architecture Overview
 
-The backend is a modular monolith — a single NestJS application split into domain modules. This is a prototype, not production-ready.
+The backend is a modular monolith — a single NestJS application split into domain modules. This is the prototype
 
 ```mermaid
 graph TB
