@@ -1,0 +1,162 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ContentType {
+  ARTICLE
+  VIDEO
+}
+
+enum ContentStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum SubscriptionPlan {
+  FREE
+  MONTHLY
+  YEARLY
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELLED
+  EXPIRED
+  PAST_DUE
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  firstName String   @map("first_name")
+  lastName  String   @map("last_name")
+  avatarUrl String?  @map("avatar_url")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  roles         UserRole[]
+  subscriptions Subscription[]
+  preferences   UserPreference[]
+  contents      Content[]        @relation("AuthoredContent")
+
+  @@map("users")
+}
+
+model Role {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  users UserRole[]
+
+  @@map("roles")
+}
+
+model UserRole {
+  userId String @map("user_id")
+  roleId String @map("role_id")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+model Subscription {
+  id               String             @id @default(uuid())
+  userId           String             @map("user_id")
+  plan             SubscriptionPlan   @default(FREE)
+  status           SubscriptionStatus @default(ACTIVE)
+  startDate        DateTime           @default(now()) @map("start_date")
+  endDate          DateTime?          @map("end_date")
+  stripeCustomerId String?            @map("stripe_customer_id")
+  createdAt        DateTime           @default(now()) @map("created_at")
+  updatedAt        DateTime           @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@map("subscriptions")
+}
+
+model UserPreference {
+  id                String   @id @default(uuid())
+  userId            String   @map("user_id")
+  topicId           String?  @map("topic_id")
+  emailDigest       Boolean  @default(true) @map("email_digest")
+  pushNotifications Boolean  @default(false) @map("push_notifications")
+  language          String   @default("en")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  user  User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topic Tag? @relation(fields: [topicId], references: [id])
+
+  @@index([userId])
+  @@map("user_preferences")
+}
+
+model Content {
+  id              String        @id @default(uuid())
+  title           String
+  slug            String        @unique
+  type            ContentType   @default(ARTICLE)
+  body            String?
+  excerpt         String?
+  thumbnailUrl    String?       @map("thumbnail_url")
+  videoUrl        String?       @map("video_url")
+  isPremium       Boolean       @default(false) @map("is_premium")
+  status          ContentStatus @default(DRAFT)
+  publishedAt     DateTime?     @map("published_at")
+  authorId        String        @map("author_id")
+  strapiId        String?       @unique @map("strapi_id")
+  viewCount       Int           @default(0) @map("view_count")
+  readTimeMinutes Int?          @map("read_time_minutes")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  author User         @relation("AuthoredContent", fields: [authorId], references: [id])
+  tags   ContentTag[]
+
+  @@index([status, publishedAt])
+  @@index([type, isPremium])
+  @@index([authorId])
+  @@map("contents")
+}
+
+model Tag {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  parentId    String?  @map("parent_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  parent   Tag?  @relation("TagHierarchy", fields: [parentId], references: [id])
+  children Tag[] @relation("TagHierarchy")
+
+  contents    ContentTag[]
+  preferences UserPreference[]
+
+  @@map("tags")
+}
+
+model ContentTag {
+  contentId String @map("content_id")
+  tagId     String @map("tag_id")
+
+  content Content @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  tag     Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([contentId, tagId])
+  @@map("content_tags")
+}
