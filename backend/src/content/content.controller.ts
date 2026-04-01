@@ -13,17 +13,16 @@ import {
   ApiResponse,
   ApiParam,
 } from '@nestjs/swagger';
-import { AuthGuard } from '@nestjs/passport';
 import { ContentService } from './content.service';
 import { QueryContentDto } from './dto/query-content.dto';
-import { Public } from '../common/decorators/public.decorator';
+import { OptionalJwtGuard } from '../common/guards/optional-jwt.guard';
 
 @ApiTags('Content')
 @Controller('content')
 export class ContentController {
   constructor(private readonly contentService: ContentService) {}
 
-  @Public()
+  @UseGuards(OptionalJwtGuard)
   @Get()
   @ApiOperation({ summary: 'List published content with filtering and pagination' })
   @ApiResponse({ status: 200, description: 'Paginated content list' })
@@ -32,7 +31,7 @@ export class ContentController {
     return this.contentService.findAll(query, hasSubscription);
   }
 
-  @Public()
+  @UseGuards(OptionalJwtGuard)
   @Get(':slug')
   @ApiOperation({ summary: 'Get content by slug — premium content gated for non-subscribers' })
   @ApiParam({ name: 'slug', description: 'Content slug' })
