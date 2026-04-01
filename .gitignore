@@ -24,6 +24,12 @@ coverage/
 # Compiled
 *.js.map
 
+# Next.js (frontend)
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+
 # Strapi
 cms/.tmp/
 cms/.cache/
