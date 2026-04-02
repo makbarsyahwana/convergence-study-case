@@ -1,6 +1,6 @@
 # Healthfulforu.com v2.0
 
-> Backend prototype for a subscription-based health education platform.
+> Full-stack prototype for a subscription-based health education platform.
 
 ## Table of Contents
 
@@ -16,11 +16,12 @@
 
 ## Architecture Overview
 
-This is the full architecture design for the platform. for prototype purpose the code only cover :
-1. Backend API(Content API, Auth API: Simple login/register)
-3. Subscription flag
-4. Database models + migrations
-5. Headless CMS Strapi integration
+This is the full architecture design for the platform. For prototype purposes the code covers:
+1. **Backend API** — Content API, Auth API (login/register), Subscription management
+2. **Frontend** — Next.js consumer app with content browsing, auth, subscription, and UAT dashboard
+3. **Subscription gating** — Premium content locked for free users
+4. **Database models + migrations** — PostgreSQL with Prisma ORM
+5. **Headless CMS** — Strapi integration with webhook sync and full-sync
 
 ```mermaid
 graph TB
@@ -110,6 +111,8 @@ See [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) for the full design documen
 | **CMS** | Strapi | Headless CMS for editors, webhook sync |
 | **Auth** | JWT + Passport | Stateless, no session store needed |
 | **Docs** | Swagger/OpenAPI | Auto-generated from decorators |
+| **Frontend** | Next.js 16 + React 19 | App Router, SSR-ready |
+| **UI** | Tailwind CSS + shadcn/ui | Rapid, consistent styling |
 | **Testing** | Jest + Supertest | 10 unit tests, E2E scaffold |
 | **Container** | Docker Compose | Local dev only |
 
@@ -123,93 +126,144 @@ See [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) for the full design documen
 - Docker & Docker Compose
 - npm
 
-### 1. Backend Setup
+### 1. Infrastructure
 
 ```bash
 # Clone the repository
 git clone <repo-url>
 cd convergence-study-case
 
-# Start infrastructure (PostgreSQL + Redis)
+# Start PostgreSQL + Redis
 docker compose up -d postgres redis
+```
 
-# Install dependencies
+### 2. Backend Setup
+
+```bash
 cd backend
 npm install
 
-# Generate Prisma client
+# Generate Prisma client + run migrations + seed data
 npx prisma generate
-
-# Run database migrations
 npx prisma migrate dev
-
-# Seed the database
 npm run prisma:seed
 
-# Start the development server
+# Start the backend
 npm run start:dev
 ```
 
-The API will be available at `http://localhost:3000/api/v1`
-Swagger docs at `http://localhost:3000/api/docs`
+- API: `http://localhost:3000/api/v1`
+- Swagger docs: `http://localhost:3000/api/docs`
 
-### 2. Strapi CMS Setup
-
-#### Step 1: Create Strapi v4 project
+### 3. Frontend Setup
 
 ```bash
-cd convergence-study-case
-npx create-strapi-app@latest cms --quickstart --no-run
+cd frontend
+npm install
+npx next dev -p 4000
 ```
 
-This creates a `cms/` folder with a full Strapi v4 project using SQLite by default.
+- Frontend: `http://localhost:4000`
+- UAT Dashboard: `http://localhost:4000/uat`
 
-#### Step 2: Start Strapi
+### 4. Strapi CMS Setup
+
+#### Step 1: Install & start Strapi
+
+The `cms/` directory is already included in the repo.
 
 ```bash
 cd cms
+npm install
 npm run develop
 ```
 
-Strapi Admin will be available at `http://localhost:1337/admin`. Create your admin account on first visit.
+Strapi Admin will be available at `http://localhost:1337/admin`.
+On first run, you'll be prompted to create an admin account.
 
-#### Step 3: Create the `Article` content type
+#### Step 2: Create the `Article` content type
 
-Go to Content-Type Builder → Create new collection type → `Article` with these fields:
+1. Go to **Content-Type Builder** → **Create new collection type** → Name it `Article`
+2. Add these fields:
 
 | Field | Type | Notes |
 |-------|------|-------|
 | `title` | Short text | Required |
 | `slug` | UID (from title) | Required, unique |
-| `body` | Rich text | |
-| `excerpt` | Long text | |
+| `body` | Rich text (Blocks) | Strapi 5 uses block-based rich text |
+| `excerpt` | Long text | Optional summary |
 | `type` | Enumeration | Values: `ARTICLE`, `VIDEO` |
 | `isPremium` | Boolean | Default: false |
-| `thumbnailUrl` | Short text | |
-| `videoUrl` | Short text | |
-| `readTimeMinutes` | Integer | |
+| `thumbnailUrl` | Short text | Optional |
+| `videoUrl` | Short text | Optional |
+| `readTimeMinutes` | Integer | Optional |
 
-Save the content type — Strapi will restart automatically.
+3. Click **Save** — Strapi will restart automatically.
 
-#### Step 4: Generate an API token
+#### Step 3: Configure API access
 
-Strapi Admin → Settings → API Tokens → Create new token → **Full access** → copy the token and add it to `backend/.env`:
+1. Go to **Settings** → **Users & Permissions plugin** → **Roles** → **Public**
+2. Under **Article**, enable: `find`, `findOne`
+3. Click **Save**
+
+Then create an API token for the backend's full-sync feature:
+
+1. Go to **Settings** → **API Tokens** → **Create new API Token**
+2. Name: `Backend Sync`, Token type: **Full access**
+3. Copy the token and set it in `backend/.env`:
 
 ```
 STRAPI_API_TOKEN=your-token-here
 ```
 
-#### Step 5: Configure webhook
+#### Step 4: Configure webhook (auto-sync on publish)
 
-Strapi Admin → Settings → Webhooks → Add webhook:
+1. Go to **Settings** → **Webhooks** → **Create new webhook**
+2. Fill in:
+   - **Name**: `Content Sync`
+   - **URL**: `http://localhost:3000/api/v1/cms-sync/webhook`
+   - **Events**: Check all under **Entry** (Create, Update, Delete, Publish, Unpublish)
+3. **Do NOT add** an Authorization header — the webhook endpoint is public
+4. Click **Save**
 
-- **URL**: `http://localhost:3000/api/v1/cms-sync/webhook`
-- **Events**: Entry → Create, Update, Delete, Publish, Unpublish
-- **Headers** (optional): add `x-strapi-signature` with your webhook secret if `STRAPI_WEBHOOK_SECRET` is set in `backend/.env`
+> **Note:** Set `STRAPI_WEBHOOK_SECRET=""` in `backend/.env` for local development. The backend skips signature verification when the secret is empty.
 
-### 3. Running the Full Stack
+### 5. Creating an Article (End-to-End Walkthrough)
 
-After both backend and Strapi are set up:
+This walkthrough covers creating content in Strapi and seeing it on the frontend.
+
+#### Method A: Auto-sync via webhook
+
+1. Open Strapi Admin at `http://localhost:1337/admin`
+2. Go to **Content Manager** → **Article** → **Create new entry**
+3. Fill in the fields:
+   - **title**: `The Power of Hand Hygiene`
+   - **slug**: auto-generated from title, or type your own
+   - **body**: Write your article content in the rich text editor
+   - **type**: `ARTICLE`
+   - **isPremium**: toggle on/off
+4. Click **Publish** (not just Save — drafts don't trigger webhooks)
+5. Strapi fires the webhook → backend receives it → content is synced to PostgreSQL
+6. Open the frontend at `http://localhost:4000` — the article should appear in the content list
+7. Click on it to see the full article (or gating overlay if it's premium and you're not subscribed)
+
+#### Method B: Manual full-sync (admin only)
+
+1. Log in to the frontend at `http://localhost:4000/login` with `admin@healthfulforu.com` / `Admin123!`
+2. Click the **Sync CMS** button in the navbar
+3. This calls `POST /api/v1/cms-sync/full-sync` which fetches all published articles from Strapi and upserts them into PostgreSQL
+4. Refresh the home page to see all synced content
+
+#### Verifying content gating
+
+| Login as | Sees premium content? |
+|----------|----------------------|
+| Not logged in | Excerpt only + "Upgrade" overlay |
+| `free@example.com` / `FreeUser123!` | Excerpt only + "Upgrade" overlay |
+| `premium@example.com` / `Premium123!` | Full article body |
+| `admin@healthfulforu.com` / `Admin123!` | Full article body |
+
+### 6. Running the Full Stack (summary)
 
 ```bash
 # Terminal 1 — infrastructure
@@ -217,11 +271,13 @@ docker compose up -d postgres redis
 
 # Terminal 2 — backend API
 cd backend
-npx prisma migrate dev
-npm run prisma:seed
 npm run start:dev          # http://localhost:3000
 
-# Terminal 3 — Strapi CMS
+# Terminal 3 — frontend
+cd frontend
+npx next dev -p 4000       # http://localhost:4000
+
+# Terminal 4 — Strapi CMS
 cd cms
 npm run develop            # http://localhost:1337
 ```
@@ -296,8 +352,8 @@ convergence-study-case/
 │   │   ├── user/                # User profile + preferences
 │   │   ├── tag/                 # Tags/topics
 │   │   ├── cache/               # Redis cache service
-│   │   ├── cms-sync/            # Strapi webhook handler
-│   │   ├── common/              # Decorators, guards, DTOs
+│   │   ├── cms-sync/            # Strapi webhook + full-sync + blocks→HTML
+│   │   ├── common/              # Decorators, guards (incl. OptionalJwtGuard)
 │   │   ├── prisma/              # Database service
 │   │   ├── app.module.ts        # Root module
 │   │   ├── main.ts              # Bootstrap
@@ -308,7 +364,22 @@ convergence-study-case/
 │   ├── test/                    # E2E tests
 │   ├── Dockerfile               # Multi-stage production build
 │   └── package.json
-├── docker-compose.yml           # PostgreSQL + Redis + API + Strapi
+├── frontend/
+│   ├── app/
+│   │   ├── page.tsx             # Content list with search, filters, pagination
+│   │   ├── login/page.tsx       # Login with test account quick-fill
+│   │   ├── register/page.tsx    # Registration
+│   │   ├── content/[slug]/      # Content detail with premium gating overlay
+│   │   ├── subscription/        # Subscription plan management
+│   │   ├── profile/             # User profile + preferences
+│   │   ├── uat/page.tsx         # UAT dashboard — API test runner
+│   │   └── layout.tsx           # Root layout with AuthProvider + Navbar
+│   ├── components/              # Navbar, ContentCard, shadcn/ui
+│   ├── context/AuthContext.tsx   # Auth state, token management
+│   ├── lib/api-client.ts        # Typed API client for all endpoints
+│   └── package.json
+├── cms/                         # Strapi 5 CMS (SQLite default)
+├── docker-compose.yml           # PostgreSQL + Redis
 └── README.md                    # This file
 ```
 
