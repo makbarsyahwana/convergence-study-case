@@ -82,7 +82,7 @@ export class StrapiClientService {
       id: item.id ?? attrs.id,
       title: attrs.title ?? 'Untitled',
       slug: attrs.slug ?? `content-${item.id}-${Date.now()}`,
-      body: attrs.body ?? null,
+      body: this.blocksToHtml(attrs.body),
       excerpt: attrs.excerpt ?? null,
       type: (attrs.type ?? 'ARTICLE').toUpperCase(),
       isPremium: attrs.isPremium ?? false,
@@ -94,7 +94,64 @@ export class StrapiClientService {
   }
 
   /**
-   * Extracts URL from Strapi v4 media field (populated format).
+   * Converts Strapi v5 rich-text blocks to an HTML string.
+   * Falls back to returning the value as-is if it's already a string.
+   */
+  private blocksToHtml(body: any): string | null {
+    if (!body) return null;
+    if (typeof body === 'string') return body;
+    if (!Array.isArray(body)) return JSON.stringify(body);
+
+    return body
+      .map((block: any) => {
+        if (block.type === 'paragraph') {
+          const text = (block.children ?? [])
+            .map((child: any) => {
+              let t = child.text ?? '';
+              if (child.bold) t = `<strong>${t}</strong>`;
+              if (child.italic) t = `<em>${t}</em>`;
+              if (child.underline) t = `<u>${t}</u>`;
+              if (child.code) t = `<code>${t}</code>`;
+              if (child.type === 'link') t = `<a href="${child.url}">${t}</a>`;
+              return t;
+            })
+            .join('');
+          return `<p>${text}</p>`;
+        }
+        if (block.type === 'heading') {
+          const level = block.level ?? 2;
+          const text = (block.children ?? []).map((c: any) => c.text ?? '').join('');
+          return `<h${level}>${text}</h${level}>`;
+        }
+        if (block.type === 'list') {
+          const tag = block.format === 'ordered' ? 'ol' : 'ul';
+          const items = (block.children ?? [])
+            .map((li: any) => {
+              const text = (li.children ?? []).map((c: any) => c.text ?? '').join('');
+              return `<li>${text}</li>`;
+            })
+            .join('');
+          return `<${tag}>${items}</${tag}>`;
+        }
+        if (block.type === 'image') {
+          return `<img src="${block.image?.url ?? ''}" alt="${block.image?.alternativeText ?? ''}" />`;
+        }
+        if (block.type === 'quote') {
+          const text = (block.children ?? []).map((c: any) => c.text ?? '').join('');
+          return `<blockquote>${text}</blockquote>`;
+        }
+        if (block.type === 'code') {
+          const text = (block.children ?? []).map((c: any) => c.text ?? '').join('');
+          return `<pre><code>${text}</code></pre>`;
+        }
+        return '';
+      })
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  /**
+   * Extracts URL from Strapi v4/v5 media field (populated format).
    * Strapi media: { data: { attributes: { url } } }
    */
   private extractMediaUrl(media: any): string | null {

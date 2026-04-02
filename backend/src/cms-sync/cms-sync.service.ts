@@ -11,7 +11,7 @@ interface StrapiWebhookPayload {
     id: number;
     title?: string;
     slug?: string;
-    body?: string;
+    body?: any;
     excerpt?: string;
     type?: string;
     isPremium?: boolean;
@@ -67,7 +67,7 @@ export class CmsSyncService {
       slug:
         entry.slug ||
         `content-${strapiId}-${Date.now()}`,
-      body: entry.body || null,
+      body: this.normalizeBody(entry.body),
       excerpt: entry.excerpt || null,
       type: (entry.type?.toUpperCase() as 'ARTICLE' | 'VIDEO') || 'ARTICLE',
       isPremium: entry.isPremium || false,
@@ -138,6 +138,33 @@ export class CmsSyncService {
 
     await this.cache.del('content:list:*');
     return { status: 'unpublished', strapiId };
+  }
+
+  private normalizeBody(body: any): string | null {
+    if (!body) return null;
+    if (typeof body === 'string') return body;
+    if (!Array.isArray(body)) return JSON.stringify(body);
+
+    return body
+      .map((block: any) => {
+        const childText = (children: any[]) =>
+          (children ?? []).map((c: any) => c.text ?? '').join('');
+
+        if (block.type === 'paragraph') return `<p>${childText(block.children)}</p>`;
+        if (block.type === 'heading') return `<h${block.level ?? 2}>${childText(block.children)}</h${block.level ?? 2}>`;
+        if (block.type === 'quote') return `<blockquote>${childText(block.children)}</blockquote>`;
+        if (block.type === 'code') return `<pre><code>${childText(block.children)}</code></pre>`;
+        if (block.type === 'list') {
+          const tag = block.format === 'ordered' ? 'ol' : 'ul';
+          const items = (block.children ?? [])
+            .map((li: any) => `<li>${childText(li.children)}</li>`)
+            .join('');
+          return `<${tag}>${items}</${tag}>`;
+        }
+        return '';
+      })
+      .filter(Boolean)
+      .join('\n');
   }
 
   async fullSync(): Promise<{ synced: number; errors: number; total: number }> {
