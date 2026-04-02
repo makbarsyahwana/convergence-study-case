@@ -11,12 +11,31 @@ import {
   FlaskConical,
   Menu,
   X,
+  RefreshCw,
 } from "lucide-react";
 import { useState } from "react";
+import { api } from "@/lib/api-client";
 
 export function Navbar() {
-  const { user, isAdmin, hasSubscription, logout, loading } = useAuth();
+  const { user, isAdmin, hasSubscription, logout, loading, token } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState("");
+
+  const handleSync = async () => {
+    if (!token || syncing) return;
+    setSyncing(true);
+    setSyncMsg("");
+    const res = await api.fullSync(token);
+    if (res.ok) {
+      const d = res.data as any;
+      setSyncMsg(`Synced ${d.synced ?? 0} items`);
+    } else {
+      setSyncMsg("Sync failed");
+    }
+    setSyncing(false);
+    setTimeout(() => setSyncMsg(""), 3000);
+  };
 
   return (
     <nav className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -46,9 +65,21 @@ export function Navbar() {
           {loading ? null : user ? (
             <>
               {isAdmin && (
-                <Badge variant="outline" className="text-xs">
-                  ADMIN
-                </Badge>
+                <>
+                  <Badge variant="outline" className="text-xs">
+                    ADMIN
+                  </Badge>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleSync}
+                    disabled={syncing}
+                    className="text-xs"
+                  >
+                    <RefreshCw className={`mr-1 h-3.5 w-3.5 ${syncing ? "animate-spin" : ""}`} />
+                    {syncMsg || (syncing ? "Syncing…" : "Sync CMS")}
+                  </Button>
+                </>
               )}
               {hasSubscription ? (
                 <Badge className="bg-emerald-600 text-xs">Premium</Badge>
@@ -114,6 +145,15 @@ export function Navbar() {
               <Link href="/subscription" className="block text-sm py-1" onClick={() => setMobileOpen(false)}>
                 Subscription
               </Link>
+              {isAdmin && (
+                <button
+                  className="block text-sm py-1"
+                  onClick={() => { handleSync(); setMobileOpen(false); }}
+                  disabled={syncing}
+                >
+                  {syncing ? "Syncing…" : "Sync CMS Content"}
+                </button>
+              )}
               <button className="block text-sm py-1 text-destructive" onClick={() => { logout(); setMobileOpen(false); }}>
                 Logout
               </button>
