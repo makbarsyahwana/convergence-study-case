@@ -59,6 +59,18 @@ export class CmsSyncService {
     }
   }
 
+  private cachedAdminId: string | null = null;
+
+  private async getAdminId(): Promise<string> {
+    if (this.cachedAdminId) return this.cachedAdminId;
+    const admin = await this.prisma.user.findFirst({
+      where: { roles: { some: { role: { name: 'ADMIN' } } } },
+      select: { id: true },
+    });
+    this.cachedAdminId = admin?.id || '';
+    return this.cachedAdminId;
+  }
+
   private async upsertContent(entry: StrapiWebhookPayload['entry']) {
     const strapiId = String(entry.id);
 
@@ -78,29 +90,13 @@ export class CmsSyncService {
       publishedAt: entry.publishedAt ? new Date(entry.publishedAt) : null,
     };
 
-    const existing = await this.prisma.content.findUnique({
+    const authorId = await this.getAdminId();
+
+    const result = await this.prisma.content.upsert({
       where: { strapiId },
+      create: { ...data, strapiId, authorId },
+      update: data,
     });
-
-    let result;
-    if (existing) {
-      result = await this.prisma.content.update({
-        where: { strapiId },
-        data,
-      });
-    } else {
-      const admin = await this.prisma.user.findFirst({
-        where: { roles: { some: { role: { name: 'ADMIN' } } } },
-      });
-
-      result = await this.prisma.content.create({
-        data: {
-          ...data,
-          strapiId,
-          authorId: admin?.id || '',
-        },
-      });
-    }
 
     await this.cache.del('content:list:*');
     this.logger.log(`Content upserted: ${result.id} (strapi: ${strapiId})`);
